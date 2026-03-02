@@ -1,0 +1,3 @@
+rootProject.name = 'external-api-in-transaction'
+include 'app-api'
+include 'app-external-api'
