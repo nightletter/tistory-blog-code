@@ -5,6 +5,7 @@ spring:
     username: sa
     password:
 
+
     h2:
       console:
         enabled: true
@@ -16,3 +17,9 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
+
+# request timeout 테스트용
+server:
+  tomcat:
+    threads:
+      max: 20

@@ -7,8 +7,6 @@ import io.gatling.javaapi.core.*;
 import io.gatling.javaapi.http.*;
 
 public class CarApiSimulation extends Simulation {
-//    ./gradlew :app-api:gatlingRun
-
     HttpProtocolBuilder httpProtocol = http
             .baseUrl("http://localhost:8080")
             .acceptHeader("application/json")
@@ -16,7 +14,7 @@ public class CarApiSimulation extends Simulation {
 
     ScenarioBuilder scn = scenario("Car API Load Test")
             .exec(http("test")
-                    .post("/car")
+                    .post("/v2/car")
                     .check(status().is(200)));
 
     {
