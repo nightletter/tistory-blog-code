@@ -7,6 +7,7 @@ import io.gatling.javaapi.core.*;
 import io.gatling.javaapi.http.*;
 
 public class CarApiSimulation extends Simulation {
+//    ./gradlew :app-api:gatlingRun
 
     HttpProtocolBuilder httpProtocol = http
             .baseUrl("http://localhost:8080")
