@@ -1,16 +1,27 @@
 package me.nightletter.appapi.service;
 
 import lombok.RequiredArgsConstructor;
-import me.nightletter.appapi.*;
+import lombok.extern.slf4j.Slf4j;
+import me.nightletter.appapi.client.CarSpecClient;
+import me.nightletter.appapi.domain.*;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+
+import java.util.UUID;
+
+import static me.nightletter.appapi.messaging.RedisKeys.TASK;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CarService {
 
-//    v1 dependencies
+    //    v1 dependencies
     private final RestClient restClient;
     private final CarRepository carRepository;
 
@@ -18,8 +29,17 @@ public class CarService {
     private final CarSpecClient carSpecClient;
     private final CarProcessor carProcessor;
 
+    //    v3 dependencies
+    private final WebClient carSpecWebClient;
+    private final CarRegistrationTaskRepository carRegistrationTaskRepository;
+
+    //    v4 dependencies
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final ApplicationEventPublisher applicationEventPublisher;
+
+
     @Transactional
-    public void createCarV1(String owner) {
+    public void registrationV1(String owner, String licensePlate) {
         CarSpec carSpec = restClient.get()
                 .uri("http://localhost:9090/car/specs")
                 .retrieve()
@@ -35,12 +55,47 @@ public class CarService {
         );
     }
 
-    public void createCarV2(String owner) {
-        CarSpec spec = carSpecClient.getSpec();
+    public void registrationV2(String owner, String licensePlate) {
+        CarSpec spec = carSpecClient.getSpec(owner, licensePlate);
         carProcessor.save(owner, spec);
     }
 
-    public void createCarV3(String owner) {
+    public String registrationV3(String owner, String licensePlate) {
+        String taskId = UUID.randomUUID().toString();
 
+        CarRegistrationTask savedTask = carRegistrationTaskRepository.save(
+                new CarRegistrationTask(taskId, owner)
+        );
+
+        carSpecWebClient.get()
+                .uri("/car/specs")
+                .retrieve()
+                .bodyToMono(CarSpec.class)
+                .flatMap(spec -> {
+                    log.info(Thread.currentThread().getName());
+                    carProcessor.save(taskId, owner, spec);
+                    return Mono.empty();
+                })
+                .subscribe();
+
+        return savedTask.getId();
+    }
+
+    public String getCarStatusV3(String taskId) {
+        CarRegistrationTask fetch = carRegistrationTaskRepository.findById(taskId)
+                .orElseThrow();
+
+        return fetch.getStatus();
+    }
+
+    public String registrationV4(String owner, String licensePlate) {
+        String taskId = UUID.randomUUID().toString();
+        applicationEventPublisher.publishEvent(new CarRegistrationEvent(taskId, owner, licensePlate));
+        return taskId;
+    }
+
+    public String getCarStatusV4(String taskId) {
+        String status = (String) redisTemplate.opsForValue().get(TASK.toKey(taskId));
+        return status;
     }
 }

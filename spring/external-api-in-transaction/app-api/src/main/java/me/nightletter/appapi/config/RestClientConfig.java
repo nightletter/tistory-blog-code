@@ -1,4 +1,4 @@
-package me.nightletter.appapi;
+package me.nightletter.appapi.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

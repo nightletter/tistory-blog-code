@@ -1,4 +1,4 @@
-package me.nightletter.appapi;
+package me.nightletter.appapi.domain;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
