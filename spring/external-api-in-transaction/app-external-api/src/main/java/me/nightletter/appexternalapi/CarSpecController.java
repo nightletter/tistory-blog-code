@@ -18,7 +18,7 @@ public class CarSpecController {
     @GetMapping("/car/specs")
     public ResponseEntity specs() throws InterruptedException {
 
-        Thread.sleep(50_000);
+        Thread.sleep(30_000);
 
         Map<String, Object> data = new HashMap<>();
         data.put("STATUS", "200");

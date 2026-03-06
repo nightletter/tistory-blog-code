@@ -15,11 +15,13 @@ public class CarRegistrationTask {
     private String id;
     private String owner;
     private String status;
+    private String licensePlate;
 
-    public CarRegistrationTask(String id, String owner) {
+    public CarRegistrationTask(String id, String owner, String licensePlate) {
         this.id = id;
         this.owner = owner;
         this.status = "PENDING";
+        this.licensePlate = licensePlate;
     }
 
     public void updateStatus(String status) {

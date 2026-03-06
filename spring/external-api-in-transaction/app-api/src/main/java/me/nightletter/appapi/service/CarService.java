@@ -68,7 +68,7 @@ public class CarService {
         String taskId = UUID.randomUUID().toString();
 
         CarRegistrationTask savedTask = carRegistrationTaskRepository.save(
-                new CarRegistrationTask(taskId, owner)
+                new CarRegistrationTask(taskId, owner, licensePlate)
         );
 
         carSpecWebClient.get()
@@ -92,14 +92,30 @@ public class CarService {
         return fetch.getStatus();
     }
 
+    @Transactional
     public String registrationV4(String owner, String licensePlate) {
         String taskId = UUID.randomUUID().toString();
-        applicationEventPublisher.publishEvent(new CarRegistrationEvent(taskId, owner, licensePlate));
+
+        var task = carRegistrationTaskRepository.save(
+                new CarRegistrationTask(taskId, owner, licensePlate)
+        );
+
+        applicationEventPublisher.publishEvent(
+                new CarRegistrationEvent(task)
+        );
+
         return taskId;
     }
 
     public String getTaskStatusV4(String taskId) {
         String status = (String) redisTemplate.opsForValue().get(TASK.toKey(taskId));
-        return status;
+
+        if (status != null) {
+            return status;
+        }
+
+        return carRegistrationTaskRepository.findById(taskId)
+                .orElseThrow(IllegalArgumentException::new)
+                .getStatus();
     }
 }

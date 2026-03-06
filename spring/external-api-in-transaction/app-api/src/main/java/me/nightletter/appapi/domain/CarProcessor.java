@@ -47,4 +47,19 @@ public class CarProcessor {
                     carRegistrationTaskRepository.save(item);
                 });
     }
+
+    @Transactional
+    public void confirmRegistration(String taskId, CarSpec carSpec) {
+        carRegistrationTaskRepository.findById(taskId)
+                .ifPresent(item -> {
+                    carRepository.save(new Car(
+                            item.getOwner(),
+                            carSpec.carVender(),
+                            carSpec.carName(),
+                            carSpec.subModel()
+                    ));
+
+                    item.updateStatus("SUCCESS");
+                });
+    }
 }
