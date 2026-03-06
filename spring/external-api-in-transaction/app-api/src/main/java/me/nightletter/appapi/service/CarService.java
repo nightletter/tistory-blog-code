@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import me.nightletter.appapi.client.CarSpecClient;
 import me.nightletter.appapi.domain.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,9 @@ public class CarService {
     private final RestClient restClient;
     private final CarRepository carRepository;
 
+    @Value("${app.external-api.url}")
+    private String externalApiUrl;
+
     //    v2 dependencies
     private final CarSpecClient carSpecClient;
     private final CarProcessor carProcessor;
@@ -41,7 +45,7 @@ public class CarService {
     @Transactional
     public void registrationV1(String owner, String licensePlate) {
         CarSpec carSpec = restClient.get()
-                .uri("http://localhost:9090/car/specs")
+                .uri(externalApiUrl + "/car/specs")
                 .retrieve()
                 .body(CarSpec.class);
 
@@ -81,7 +85,7 @@ public class CarService {
         return savedTask.getId();
     }
 
-    public String getCarStatusV3(String taskId) {
+    public String getTaskStatusV3(String taskId) {
         CarRegistrationTask fetch = carRegistrationTaskRepository.findById(taskId)
                 .orElseThrow();
 
@@ -94,7 +98,7 @@ public class CarService {
         return taskId;
     }
 
-    public String getCarStatusV4(String taskId) {
+    public String getTaskStatusV4(String taskId) {
         String status = (String) redisTemplate.opsForValue().get(TASK.toKey(taskId));
         return status;
     }

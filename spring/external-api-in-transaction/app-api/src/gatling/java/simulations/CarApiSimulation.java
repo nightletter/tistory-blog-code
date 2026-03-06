@@ -36,7 +36,7 @@ public class CarApiSimulation extends Simulation {
 
     {
         setUp(
-                scn.injectOpen(atOnceUsers(200))
+                scn.injectOpen(atOnceUsers(5000))
         ).protocols(httpProtocol);
     }
 }

@@ -1,0 +1,50 @@
+services:
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+
+  app-external-api:
+    build:
+      context: .
+      dockerfile: app-external-api/Dockerfile
+    container_name: app-external-api
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./agent:/agent
+    environment:
+      - JAVA_OPTS=-javaagent:/agent/scouter.agent.jar -Dscouter.config=/agent/app-external-api.conf
+    networks:
+      - app-network
+
+  app-api:
+    build:
+      context: .
+      dockerfile: app-api/Dockerfile
+    container_name: app-api
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      app-external-api:
+        condition: service_started
+    volumes:
+      - ./agent:/agent
+    environment:
+      - JAVA_OPTS=-javaagent:/agent/scouter.agent.jar -Dscouter.config=/agent/app-api.conf
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
