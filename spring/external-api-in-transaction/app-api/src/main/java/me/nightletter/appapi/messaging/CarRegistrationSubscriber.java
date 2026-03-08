@@ -22,26 +22,20 @@ public class CarRegistrationSubscriber {
     private final RedisTemplate<String, Object> redisTemplate;
     private final CarProcessor carProcessor;
 
-    public void receiveMessage(String taskId){
-        log.info("taskId = {}", taskId);
-        log.info("receiveMessage thread = {}", Thread.currentThread().getName());
-
-        CompletableFuture.runAsync(() -> {
-            try {
-                log.info("runAsync thread = {}", Thread.currentThread().getName());
-
-                CarSpec carSpec = carSpecWebClient.get()
-                        .uri("/car/specs")
-                        .retrieve()
-                        .bodyToMono(CarSpec.class)
-                        .block();
-
-                carProcessor.confirmRegistration(taskId, carSpec);
-                redisTemplate.opsForValue().set(RedisKeys.TASK.toKey(taskId), "SUCCESS");
-            } catch (Exception ex) {
-                log.error("CarRegistrationSubscriber.receiveMessage", ex);
-                redisTemplate.opsForValue().set(RedisKeys.TASK.toKey(taskId), "FAILED");
-            }
-        });
+    public void receiveMessage(String taskId) {
+        carSpecWebClient.get()
+                .uri("/car/specs")
+                .retrieve()
+                .bodyToMono(CarSpec.class)
+                .doOnNext(carSpec -> {
+                    log.info("receiveMessage = {}", Thread.currentThread().getName());
+                    carProcessor.confirmRegistration(taskId, carSpec);
+                    redisTemplate.opsForValue().set(RedisKeys.TASK.toKey(taskId), "SUCCESS");
+                })
+                .doOnError(ex -> {
+                    log.error("receiveMessage = {}" + taskId, ex);
+                    redisTemplate.opsForValue().set(RedisKeys.TASK.toKey(taskId), "FAILED");
+                })
+                .subscribe();
     }
 }
