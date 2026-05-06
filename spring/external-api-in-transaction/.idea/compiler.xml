@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Gradle Imported" enabled="true">
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.projectlombok/lombok/1.18.36/5a30490a6e14977d97d9c73c924c1f1b5311ea95/lombok-1.18.36.jar" />
+        </processorPath>
+        <module name="external-api-in-transaction.app-external-api.main" />
+        <module name="external-api-in-transaction.app-api.main" />
+      </profile>
+    </annotationProcessing>
+    <bytecodeTargetLevel target="17">
+      <module name="external-api-in-transaction.app-api" target="21" />
+      <module name="external-api-in-transaction.app-api.gatling" target="21" />
+      <module name="external-api-in-transaction.app-api.main" target="21" />
+      <module name="external-api-in-transaction.app-api.test" target="21" />
+      <module name="external-api-in-transaction.app-external-api" target="21" />
+      <module name="external-api-in-transaction.app-external-api.main" target="21" />
+      <module name="external-api-in-transaction.app-external-api.test" target="21" />
+    </bytecodeTargetLevel>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_STRING" value="-parameters" />
+  </component>
+</project>
