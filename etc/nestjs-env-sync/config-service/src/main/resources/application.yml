@@ -9,7 +9,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: "refresh"
+        include: refresh
 
 spring:
   application:
@@ -22,8 +22,18 @@ spring:
     config:
       server:
         native:
-          search-locations: /Users/khc/nestjs-env-sync/env
+          search-locations: file:${CONFIG_SEARCH_LOCATIONS:../env}
           fail-on-error: true
+  rabbitmq:
+    username: user
+    password: password
+    host: localhost
+    port: 5672
+
+app:
+  refresh:
+    exchange: ${CONFIG_REFRESH_EXCHANGE:}
+    routing-key: ${CONFIG_REFRESH_ROUTING_KEY:config-service.refresh-events}
 #        git:
 #          uri: https://github.com/PolarBookshop/config-repo
 #          default-label: main

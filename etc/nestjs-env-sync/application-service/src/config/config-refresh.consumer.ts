@@ -1,11 +1,11 @@
 import {
   Injectable,
   Logger,
-  OnModuleInit,
   OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+import { Channel, ChannelModel, ConsumeMessage, connect } from 'amqplib';
 import { DynamicConfigService } from './dynamic-config.service';
 
 type RefreshPayload = {
@@ -18,132 +18,161 @@ type RefreshPayload = {
 @Injectable()
 export class ConfigRefreshConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ConfigRefreshConsumer.name);
-  private readonly consumerName = `application-${process.pid}`;
-  private redis?: Redis;
-  private running = false;
+  private connection?: ChannelModel;
+  private channel?: Channel;
+  private consumerTag?: string;
 
   constructor(
     private readonly dynamicConfigService: DynamicConfigService,
     private readonly configService: ConfigService,
   ) {}
 
-  async onModuleInit() {
-    const streamKey = this.requireConfig('CONFIG_STREAM_KEY');
-    const groupName = this.requireConfig('CONFIG_CONSUME_GROUP');
-    this.redis = new Redis({
-      host: this.configService.get<string>('REDIS_HOST') ?? 'localhost',
-      port: this.readRedisPort(),
+  async onModuleInit(): Promise<void> {
+    const amqpUrl = this.configService.get<string>('AMQP_URL')?.trim();
+    const queueName = this.requireConfig('CONFIG_REFRESH_QUEUE');
+    const exchangeName = this.configService
+      .get<string>('CONFIG_REFRESH_EXCHANGE')
+      ?.trim();
+    const routingKey =
+      this.configService.get<string>('CONFIG_REFRESH_ROUTING_KEY')?.trim() ??
+      '';
+
+    this.connection = await connect(
+      amqpUrl || 'amqp://user:password@localhost:5672',
+    );
+    this.connection.on('error', (err) => {
+      this.logger.error('[AMQP] connection error', err);
+    });
+    this.connection.on('close', () => {
+      this.logger.warn('[AMQP] connection closed');
     });
 
-    await this.ensureGroup(streamKey, groupName);
-    this.running = true;
-    this.logger.log(
-      `[Stream] consumer started stream=${streamKey} group=${groupName} consumer=${this.consumerName}`,
+    this.channel = await this.connection.createChannel();
+    await this.channel.assertQueue(queueName, { durable: true });
+
+    if (exchangeName) {
+      await this.channel.assertExchange(exchangeName, 'topic', {
+        durable: true,
+      });
+      await this.channel.bindQueue(queueName, exchangeName, routingKey);
+    }
+
+    const consumeResult = await this.channel.consume(
+      queueName,
+      (message) => {
+        void this.handleMessage(message);
+      },
+      { noAck: false },
     );
-    void this.poll(streamKey, groupName);
+
+    this.consumerTag = consumeResult.consumerTag;
+    this.logger.log(
+      `[AMQP] consumer started queue=${queueName}${exchangeName ? ` exchange=${exchangeName} routingKey=${routingKey || '(empty)'}` : ''}`,
+    );
   }
 
-  onModuleDestroy() {
-    this.running = false;
-    this.redis?.disconnect();
-  }
-
-  private async ensureGroup(streamKey: string, groupName: string) {
-    const redis = this.getRedis();
-
-    try {
-      await redis.xgroup('CREATE', streamKey, groupName, '$', 'MKSTREAM');
-    } catch (err: unknown) {
-      if (!(err instanceof Error) || !err.message.includes('BUSYGROUP')) {
-        throw err;
-      }
+  async onModuleDestroy(): Promise<void> {
+    if (this.channel && this.consumerTag) {
+      await this.channel.cancel(this.consumerTag);
     }
+    await this.channel?.close();
+    await this.connection?.close();
   }
 
-  private async poll(streamKey: string, groupName: string) {
-    const redis = this.getRedis();
-
-    while (this.running) {
-      try {
-        const results = (await redis.xreadgroup(
-          'GROUP',
-          groupName,
-          this.consumerName,
-          'COUNT',
-          '10',
-          'BLOCK',
-          '5000',
-          'STREAMS',
-          streamKey,
-          '>',
-        )) as Array<[string, Array<[string, string[]]>]> | null;
-
-        if (!results) continue;
-
-        for (const [, messages] of results) {
-          for (const [id, fields] of messages) {
-            await this.handleMessage(id, this.parseFields(fields));
-            await redis.xack(streamKey, groupName, id);
-          }
-        }
-      } catch (err) {
-        this.logger.error('[Stream] consume error', err);
-        await this.sleep(3000);
-      }
-    }
-  }
-
-  private async handleMessage(id: string, payload: Record<string, string>) {
-    const event = this.toRefreshPayload(payload);
-    if (event.event !== 'refresh') {
-      this.logger.debug(
-        `[Stream] skip event [${id}] - unsupported type: ${event.event ?? 'unknown'}`,
-      );
+  private async handleMessage(message: ConsumeMessage | null): Promise<void> {
+    if (!message) {
       return;
     }
 
-    if (event.expiresAt) {
-      const expiresAt = Date.parse(event.expiresAt);
-      if (Number.isNaN(expiresAt)) {
-        this.logger.warn(
-          `[Stream] skip event [${id}] - invalid expiresAt: ${event.expiresAt}`,
+    const channel = this.getChannel();
+    const messageId = this.getMessageId(message);
+
+    try {
+      const event = this.toRefreshPayload(this.parsePayload(message));
+      if (event.event !== 'refresh') {
+        this.logger.debug(
+          `[AMQP] skip event [${messageId}] - unsupported type: ${event.event ?? 'unknown'}`,
         );
+        channel.ack(message);
         return;
       }
-      if (expiresAt <= Date.now()) {
-        this.logger.debug(`[Stream] skip event [${id}] - expired`);
-        return;
+
+      if (event.expiresAt) {
+        const expiresAt = Date.parse(event.expiresAt);
+        if (Number.isNaN(expiresAt)) {
+          this.logger.warn(
+            `[AMQP] skip event [${messageId}] - invalid expiresAt: ${event.expiresAt}`,
+          );
+          channel.ack(message);
+          return;
+        }
+        if (expiresAt <= Date.now()) {
+          this.logger.debug(`[AMQP] skip event [${messageId}] - expired`);
+          channel.ack(message);
+          return;
+        }
       }
-    }
 
-    this.logger.log(
-      `[Stream] refresh event received [${id}] scope=${event.scope ?? 'unknown'}`,
-    );
-    await this.dynamicConfigService.load();
+      this.logger.log(
+        `[AMQP] refresh event received [${messageId}] scope=${event.scope ?? 'unknown'}`,
+      );
+      await this.dynamicConfigService.load();
+      channel.ack(message);
+    } catch (err) {
+      this.logger.error(`[AMQP] consume error [${messageId}]`, err);
+      channel.nack(message, false, false);
+    }
   }
 
-  private parseFields(fields: string[]): Record<string, string> {
-    const result: Record<string, string> = {};
-    for (let i = 0; i < fields.length; i += 2) {
-      result[fields[i]] = fields[i + 1];
+  private parsePayload(message: ConsumeMessage): Record<string, unknown> {
+    const raw = message.content.toString('utf-8').trim();
+    if (!raw) {
+      return {};
     }
-    return result;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(`Message body is not valid JSON: ${raw}`);
+    }
+
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      throw new Error('Message body must be a JSON object');
+    }
+
+    return parsed as Record<string, unknown>;
   }
 
-  private toRefreshPayload(payload: Record<string, string>): RefreshPayload {
+  private toRefreshPayload(payload: Record<string, unknown>): RefreshPayload {
+    const event =
+      this.asString(payload['event']) ??
+      this.parseSpringCloudBusEventType(payload['type']);
+
     return {
-      event: payload['event'],
-      scope: payload['scope'],
-      timestamp: payload['timestamp'],
-      expiresAt: payload['expiresAt'],
+      event,
+      scope:
+        this.asString(payload['scope']) ??
+        this.asString(payload['originService']) ??
+        this.asString(payload['destinationService']),
+      timestamp: this.asString(payload['timestamp']),
+      expiresAt: this.asString(payload['expiresAt']),
     };
   }
 
-  private getRedis(): Redis {
-    if (!this.redis) {
-      throw new Error('Redis client is not initialized');
+  private getMessageId(message: ConsumeMessage): string {
+    return (
+      message.properties.messageId ||
+      message.properties.correlationId ||
+      String(message.fields.deliveryTag)
+    );
+  }
+
+  private getChannel(): Channel {
+    if (!this.channel) {
+      throw new Error('AMQP channel is not initialized');
     }
-    return this.redis;
+    return this.channel;
   }
 
   private requireConfig(name: string): string {
@@ -154,14 +183,14 @@ export class ConfigRefreshConsumer implements OnModuleInit, OnModuleDestroy {
     return value;
   }
 
-  private readRedisPort(): number {
-    const rawPort = this.configService.get<string>('REDIS_PORT');
-    const port = Number(rawPort ?? 6379);
-    if (!Number.isInteger(port) || port <= 0) {
-      throw new Error(`REDIS_PORT is invalid: ${rawPort ?? ''}`);
-    }
-    return port;
+  private asString(value: unknown): string | undefined {
+    return typeof value === 'string' ? value : undefined;
   }
 
-  private sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  private parseSpringCloudBusEventType(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    return value.toLowerCase().includes('refresh') ? 'refresh' : value;
+  }
 }
