@@ -1,16 +1,14 @@
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
-import { AppConfig } from '../app.config';
+import { requireEnv } from '../utils';
 
-export function createRmqMicroserviceOptions(
-  appConfig: AppConfig,
-): MicroserviceOptions {
+export function createRmqMicroserviceOptions(): MicroserviceOptions {
   return {
     transport: Transport.RMQ,
     options: {
-      urls: [appConfig.amqpUrl],
-      exchange: appConfig.configRefreshExchange,
-      routingKey: appConfig.configRefreshRoutingKey,
-      queue: appConfig.configRefreshQueue,
+      urls: [requireEnv('AMQP_URL')],
+      queue: requireEnv('CONFIG_REFRESH_QUEUE'),
+      exchange: requireEnv('CONFIG_REFRESH_EXCHANGE'),
+      routingKey: requireEnv('CONFIG_REFRESH_ROUTING_KEY'),
       noAck: false,
       socketOptions: {
         heartbeatIntervalInSeconds: 0,

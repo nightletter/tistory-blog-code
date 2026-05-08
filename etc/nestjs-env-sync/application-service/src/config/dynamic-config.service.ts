@@ -34,10 +34,6 @@ export class DynamicConfigService implements OnModuleInit {
     }
   }
 
-  private get(key: string, fallback: string): string {
-    return this.configService.get<string>(key) ?? fallback;
-  }
-
   private mergePropertySources(
     sources: ConfigServerPropertySource[],
   ): Record<string, string> {
