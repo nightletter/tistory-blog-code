@@ -5,7 +5,8 @@ import { ConfigRefreshConsumer } from './config-refresh.consumer';
 
 @Module({
   imports: [NestConfigModule.forRoot({ isGlobal: true })],
-  providers: [DynamicConfigService, ConfigRefreshConsumer],
+  controllers: [ConfigRefreshConsumer],
+  providers: [DynamicConfigService],
   exports: [DynamicConfigService],
 })
 export class ConfigModule {}

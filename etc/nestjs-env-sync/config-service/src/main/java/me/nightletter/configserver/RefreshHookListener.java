@@ -17,7 +17,6 @@ import org.springframework.util.StringUtils;
 @Component
 public class RefreshHookListener {
 
-    static final String DEFAULT_ROUTING_KEY = "config-service.refresh-events";
     static final long EVENT_TTL_SECONDS = 180L;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -27,8 +26,8 @@ public class RefreshHookListener {
 
     public RefreshHookListener(
             RabbitTemplate rabbitTemplate,
-            @Value("${app.refresh.exchange:}") String exchange,
-            @Value("${app.refresh.routing-key:" + DEFAULT_ROUTING_KEY + "}") String routingKey
+            @Value("${app.refresh.exchange}") String exchange,
+            @Value("${app.refresh.routing-key}") String routingKey
     ) {
         this.rabbitTemplate = rabbitTemplate;
         this.exchange = exchange;
@@ -47,12 +46,7 @@ public class RefreshHookListener {
         payload.put("expiresAt", now.plusSeconds(EVENT_TTL_SECONDS).toString());
         String body = serializePayload(payload);
 
-        if (StringUtils.hasText(exchange)) {
-            rabbitTemplate.convertAndSend(exchange, routingKey, body);
-            return;
-        }
-
-        rabbitTemplate.convertAndSend(routingKey, body);
+        rabbitTemplate.convertAndSend(exchange, routingKey, body);
     }
 
     private String serializePayload(Map<String, Object> payload) {

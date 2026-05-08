@@ -1,19 +1,20 @@
 package me.nightletter.configserver;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.time.Instant;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -30,19 +31,18 @@ class RefreshHookListenerTest {
     @Mock
     private RefreshScopeRefreshedEvent event;
 
+    private final String exchange = "exchange";
+    private final String routingKey = "routingKey";
+
     @Test
-    void publishesToQueueWhenExchangeIsBlank() throws Exception {
+    void publishesRefreshPayloadWithTimestampAndExpiry() throws Exception {
         when(event.getName()).thenReturn("config-service");
-        RefreshHookListener listener = new RefreshHookListener(
-                rabbitTemplate,
-                "",
-                RefreshHookListener.DEFAULT_ROUTING_KEY
-        );
+        var listener = new RefreshHookListener(rabbitTemplate, exchange, routingKey);
 
         listener.hook(event);
 
         ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
-        verify(rabbitTemplate).convertAndSend(eq(RefreshHookListener.DEFAULT_ROUTING_KEY), payloadCaptor.capture());
+        verify(rabbitTemplate).convertAndSend(eq(exchange), eq(routingKey), payloadCaptor.capture());
 
         @SuppressWarnings("unchecked")
         Map<String, Object> payload = objectMapper.readValue(payloadCaptor.getValue(), Map.class);

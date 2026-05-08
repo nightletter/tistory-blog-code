@@ -32,8 +32,8 @@ spring:
 
 app:
   refresh:
-    exchange: ${CONFIG_REFRESH_EXCHANGE:}
-    routing-key: ${CONFIG_REFRESH_ROUTING_KEY:config-service.refresh-events}
+    exchange: config.topic
+    routing-key: config.env.refresh
 #        git:
 #          uri: https://github.com/PolarBookshop/config-repo
 #          default-label: main

@@ -1,12 +1,9 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Channel, ChannelModel, ConsumeMessage, connect } from 'amqplib';
+import { Controller, Logger } from '@nestjs/common';
+import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { DynamicConfigService } from './dynamic-config.service';
+
+const REFRESH_PATTERN =
+  process.env.CONFIG_REFRESH_PATTERN?.trim() || 'config.refresh';
 
 type RefreshPayload = {
   event?: string;
@@ -15,81 +12,38 @@ type RefreshPayload = {
   expiresAt?: string;
 };
 
-@Injectable()
-export class ConfigRefreshConsumer implements OnModuleInit, OnModuleDestroy {
+type RmqChannel = {
+  ack: (message: unknown) => void;
+  nack: (message: unknown, allUpTo?: boolean, requeue?: boolean) => void;
+};
+
+type RmqMessage = {
+  fields: {
+    deliveryTag: number | string;
+  };
+  properties: {
+    messageId?: string;
+    correlationId?: string;
+  };
+};
+
+@Controller()
+export class ConfigRefreshConsumer {
   private readonly logger = new Logger(ConfigRefreshConsumer.name);
-  private connection?: ChannelModel;
-  private channel?: Channel;
-  private consumerTag?: string;
 
-  constructor(
-    private readonly dynamicConfigService: DynamicConfigService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly dynamicConfigService: DynamicConfigService) {}
 
-  async onModuleInit(): Promise<void> {
-    const amqpUrl = this.configService.get<string>('AMQP_URL')?.trim();
-    const queueName = this.requireConfig('CONFIG_REFRESH_QUEUE');
-    const exchangeName = this.configService
-      .get<string>('CONFIG_REFRESH_EXCHANGE')
-      ?.trim();
-    const routingKey =
-      this.configService.get<string>('CONFIG_REFRESH_ROUTING_KEY')?.trim() ??
-      '';
-
-    this.connection = await connect(
-      amqpUrl || 'amqp://user:password@localhost:5672',
-    );
-    this.connection.on('error', (err) => {
-      this.logger.error('[AMQP] connection error', err);
-    });
-    this.connection.on('close', () => {
-      this.logger.warn('[AMQP] connection closed');
-    });
-
-    this.channel = await this.connection.createChannel();
-    await this.channel.assertQueue(queueName, { durable: true });
-
-    if (exchangeName) {
-      await this.channel.assertExchange(exchangeName, 'topic', {
-        durable: true,
-      });
-      await this.channel.bindQueue(queueName, exchangeName, routingKey);
-    }
-
-    const consumeResult = await this.channel.consume(
-      queueName,
-      (message) => {
-        void this.handleMessage(message);
-      },
-      { noAck: false },
-    );
-
-    this.consumerTag = consumeResult.consumerTag;
-    this.logger.log(
-      `[AMQP] consumer started queue=${queueName}${exchangeName ? ` exchange=${exchangeName} routingKey=${routingKey || '(empty)'}` : ''}`,
-    );
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    if (this.channel && this.consumerTag) {
-      await this.channel.cancel(this.consumerTag);
-    }
-    await this.channel?.close();
-    await this.connection?.close();
-  }
-
-  private async handleMessage(message: ConsumeMessage | null): Promise<void> {
-    if (!message) {
-      return;
-    }
-
-    const channel = this.getChannel();
-    const messageId = this.getMessageId(message);
-
+  @EventPattern(REFRESH_PATTERN)
+  async handleRefreshEvent(
+    @Payload() payload: unknown,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    const channel = this.getChannel(context);
+    const message = this.getMessage(context);
+    const messageId = this.getMessageId(context);
     try {
-      const event = this.toRefreshPayload(this.parsePayload(message));
-      if (event.event !== 'refresh') {
+      const event = this.toRefreshPayload(this.parsePayload(payload));
+      if (event.event && event.event !== 'refresh') {
         this.logger.debug(
           `[AMQP] skip event [${messageId}] - unsupported type: ${event.event ?? 'unknown'}`,
         );
@@ -124,24 +78,36 @@ export class ConfigRefreshConsumer implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private parsePayload(message: ConsumeMessage): Record<string, unknown> {
-    const raw = message.content.toString('utf-8').trim();
-    if (!raw) {
+  private parsePayload(payload: unknown): Record<string, unknown> {
+    if (payload === null || payload === undefined) {
       return {};
     }
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error(`Message body is not valid JSON: ${raw}`);
+    if (typeof payload === 'string') {
+      const raw = payload.trim();
+      if (!raw) {
+        return {};
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error(`Message body is not valid JSON: ${raw}`);
+      }
+
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+        throw new Error('Message body must be a JSON object');
+      }
+
+      return parsed as Record<string, unknown>;
     }
 
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+    if (typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('Message body must be a JSON object');
     }
 
-    return parsed as Record<string, unknown>;
+    return payload as Record<string, unknown>;
   }
 
   private toRefreshPayload(payload: Record<string, unknown>): RefreshPayload {
@@ -160,27 +126,43 @@ export class ConfigRefreshConsumer implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private getMessageId(message: ConsumeMessage): string {
-    return (
-      message.properties.messageId ||
-      message.properties.correlationId ||
-      String(message.fields.deliveryTag)
-    );
+  private getMessageId(context: RmqContext): string {
+    const message = this.getMessage(context);
+    const messageId = this.getMessageProperty(context, 'messageId');
+    if (messageId) {
+      return messageId;
+    }
+
+    const correlationId = this.getMessageProperty(context, 'correlationId');
+    if (correlationId) {
+      return correlationId;
+    }
+
+    return String(message.fields.deliveryTag);
   }
 
-  private getChannel(): Channel {
-    if (!this.channel) {
-      throw new Error('AMQP channel is not initialized');
+  private getMessageProperty(
+    context: RmqContext,
+    key: 'messageId' | 'correlationId',
+  ): string | undefined {
+    const message = this.getMessage(context);
+    if (
+      key === 'messageId' &&
+      typeof message.properties.messageId === 'string' &&
+      message.properties.messageId
+    ) {
+      return message.properties.messageId;
     }
-    return this.channel;
-  }
 
-  private requireConfig(name: string): string {
-    const value = this.configService.get<string>(name)?.trim();
-    if (!value) {
-      throw new Error(`${name} is required`);
+    if (
+      key === 'correlationId' &&
+      typeof message.properties.correlationId === 'string' &&
+      message.properties.correlationId
+    ) {
+      return message.properties.correlationId;
     }
-    return value;
+
+    return undefined;
   }
 
   private asString(value: unknown): string | undefined {
@@ -192,5 +174,13 @@ export class ConfigRefreshConsumer implements OnModuleInit, OnModuleDestroy {
       return undefined;
     }
     return value.toLowerCase().includes('refresh') ? 'refresh' : value;
+  }
+
+  private getChannel(context: RmqContext): RmqChannel {
+    return context.getChannelRef() as RmqChannel;
+  }
+
+  private getMessage(context: RmqContext): RmqMessage {
+    return context.getMessage() as RmqMessage;
   }
 }
