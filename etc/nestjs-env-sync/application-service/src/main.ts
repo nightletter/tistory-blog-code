@@ -1,13 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions } from '@nestjs/microservices';
 import { AppModule } from './app.module';
+import { AppConfig } from './app.config';
 import { createRmqMicroserviceOptions } from './config/rmq-microservice-options';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.connectMicroservice<MicroserviceOptions>(createRmqMicroserviceOptions());
+  const appConfig = app.get(AppConfig);
+  app.connectMicroservice<MicroserviceOptions>(
+    createRmqMicroserviceOptions(appConfig),
+  );
   await app.startAllMicroservices();
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(appConfig.port);
 }
 
 void bootstrap();

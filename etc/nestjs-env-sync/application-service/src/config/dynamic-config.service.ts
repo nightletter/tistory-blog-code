@@ -1,36 +1,24 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
-
-type ConfigServerPropertySource = {
-  source: Record<string, unknown>;
-};
-
-type ConfigServerResponse = {
-  propertySources?: ConfigServerPropertySource[];
-};
+import { ConfigClient } from './config.client';
+import { ConfigServerPropertySource } from './types';
 
 @Injectable()
 export class DynamicConfigService implements OnModuleInit {
   private readonly logger = new Logger(DynamicConfigService.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly configClient: ConfigClient,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     await this.load();
   }
 
   async load(): Promise<void> {
-    const configServerUrl = this.get(
-      'CONFIG_SERVER_URL',
-      'http://localhost:8888',
-    );
-    const appName = this.get('SPRING_APPLICATION_NAME', 'application');
-    const profile = this.get('SPRING_PROFILES_ACTIVE', 'dev');
-    const url = `${configServerUrl}/${appName}/${profile}`;
-
     try {
-      const { data } = await axios.get<ConfigServerResponse>(url);
+      const data = await this.configClient.load();
       const merged = this.mergePropertySources(data.propertySources ?? []);
 
       for (const [k, v] of Object.entries(merged)) {

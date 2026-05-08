@@ -40,6 +40,7 @@ public class RefreshHookListener {
 
         Instant now = Instant.now();
         Map<String, Object> payload = new HashMap<>();
+        payload.put("pattern", "config.refresh");
         payload.put("event", "refresh");
         payload.put("scope", event.getName());
         payload.put("timestamp", now.toString());

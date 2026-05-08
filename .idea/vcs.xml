@@ -2,7 +2,5 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/etc/nestjs-env-sync" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/spring/view-table-with-spring-jpa" vcs="Git" />
   </component>
 </project>

@@ -1,9 +1,9 @@
 import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { DynamicConfigService } from './dynamic-config.service';
+import { getEnv } from '../utils';
 
-const REFRESH_PATTERN =
-  process.env.CONFIG_REFRESH_PATTERN?.trim() || 'config.refresh';
+const REFRESH_PATTERN = getEnv('CONFIG_REFRESH_PATTERN', 'config.refresh');
 
 type RefreshPayload = {
   event?: string;

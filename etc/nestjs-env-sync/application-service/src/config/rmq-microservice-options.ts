@@ -1,29 +1,23 @@
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { AppConfig } from '../app.config';
 
-const DEFAULT_AMQP_URL = 'amqp://user:password@localhost:5672';
-
-export function createRmqMicroserviceOptions(): MicroserviceOptions {
-  const queueName = requireEnv('CONFIG_REFRESH_QUEUE');
-  const exchangeName = requireEnv('CONFIG_REFRESH_EXCHANGE');
-
+export function createRmqMicroserviceOptions(
+  appConfig: AppConfig,
+): MicroserviceOptions {
   return {
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.AMQP_URL?.trim() || DEFAULT_AMQP_URL],
-      exchange: exchangeName,
-      queue: queueName,
+      urls: [appConfig.amqpUrl],
+      exchange: appConfig.configRefreshExchange,
+      routingKey: appConfig.configRefreshRoutingKey,
+      queue: appConfig.configRefreshQueue,
       noAck: false,
+      socketOptions: {
+        heartbeatIntervalInSeconds: 0,
+      },
       queueOptions: {
         durable: true,
       },
     },
   };
-}
-
-function requireEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required`);
-  }
-  return value;
 }
