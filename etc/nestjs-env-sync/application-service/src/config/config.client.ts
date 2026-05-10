@@ -7,7 +7,7 @@ import { ConfigServiceProvider } from './config-service.provider';
 export class ConfigClient {
   constructor(private readonly config: ConfigServiceProvider) {}
 
-  async load(): Promise<ConfigServerResponse> {
+  async fetchEnv(): Promise<ConfigServerResponse> {
     const configServerUrl = this.config.requireEnv('CONFIG_SERVER_URL');
     const applicationName = this.config.requireEnv('APPLICATION_NAME');
     const profile = this.config.requireEnv('ENV');

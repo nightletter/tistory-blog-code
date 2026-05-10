@@ -18,7 +18,7 @@ export class DynamicConfigService implements OnModuleInit {
 
   async load(): Promise<void> {
     try {
-      const data = await this.configClient.load();
+      const data = await this.configClient.fetchEnv();
       const merged = this.mergePropertySources(data.propertySources ?? []);
 
       for (const [k, v] of Object.entries(merged)) {
@@ -26,10 +26,10 @@ export class DynamicConfigService implements OnModuleInit {
       }
 
       this.logger.log(
-        `[ConfigServer] loaded ${Object.keys(merged).length} keys`,
+        `[DynamicConfigServer] loaded ${Object.keys(merged).length} keys`,
       );
     } catch (err) {
-      this.logger.error('[ConfigServer] failed to load config', err);
+      this.logger.error('[DynamicConfigServer] failed to load config', err);
       throw err;
     }
   }
@@ -46,6 +46,10 @@ export class DynamicConfigService implements OnModuleInit {
     return merged;
   }
 
+  /**
+   * Spring 설정 키(dot notation)를 Node.js 환경변수 형식으로 변환합니다.
+   * @example 'spring.datasource.url' -> 'SPRING_DATASOURCE_URL'
+   */
   private toEnvKey(key: string): string {
     return key ? key.replaceAll('.', '_').toUpperCase() : '';
   }

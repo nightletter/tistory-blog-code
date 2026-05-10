@@ -9,7 +9,6 @@ import { ConfigServiceProvider } from './config-service.provider';
   imports: [
     NestConfigModule.forRoot({
       isGlobal: true,
-      cache: false,
     }),
   ],
   controllers: [ConfigRefreshConsumer],
