@@ -1,12 +1,12 @@
 import { Controller, Get } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigServiceProvider } from './config/config-service.provider';
 
 @Controller()
 export class AppController {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly config: ConfigServiceProvider) {}
 
   @Get()
   getHello(): string {
-    return this.configService.get<string>('APPLICATION_GREETING_MESSAGE') ?? '';
+    return this.config.requireEnv('APPLICATION_GREETING_MESSAGE');
   }
 }
