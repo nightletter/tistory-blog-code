@@ -1,12 +1,16 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigClient } from './config.client';
 import { ConfigServerPropertySource } from './types';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class DynamicConfigService implements OnModuleInit {
   private readonly logger = new Logger(DynamicConfigService.name);
 
-  constructor(private readonly configClient: ConfigClient) {}
+  constructor(
+    private readonly configClient: ConfigClient,
+    private readonly configService: ConfigService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     await this.load();
@@ -18,7 +22,7 @@ export class DynamicConfigService implements OnModuleInit {
       const merged = this.mergePropertySources(data.propertySources ?? []);
 
       for (const [k, v] of Object.entries(merged)) {
-        process.env[this.toEnvKey(k)] = v;
+        this.configService.set(this.toEnvKey(k), v);
       }
 
       this.logger.log(
