@@ -1,5 +1,4 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ConfigClient } from './config.client';
 import { ConfigServerPropertySource } from './types';
 
@@ -7,10 +6,7 @@ import { ConfigServerPropertySource } from './types';
 export class DynamicConfigService implements OnModuleInit {
   private readonly logger = new Logger(DynamicConfigService.name);
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly configClient: ConfigClient,
-  ) {}
+  constructor(private readonly configClient: ConfigClient) {}
 
   async onModuleInit(): Promise<void> {
     await this.load();

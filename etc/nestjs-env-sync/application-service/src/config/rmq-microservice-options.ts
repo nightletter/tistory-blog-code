@@ -9,7 +9,7 @@ export function createRmqMicroserviceOptions(): MicroserviceOptions {
       queue: requireEnv('CONFIG_REFRESH_QUEUE'),
       exchange: requireEnv('CONFIG_REFRESH_EXCHANGE'),
       routingKey: requireEnv('CONFIG_REFRESH_ROUTING_KEY'),
-      noAck: false,
+      noAck: true,
       socketOptions: {
         heartbeatIntervalInSeconds: 0,
       },

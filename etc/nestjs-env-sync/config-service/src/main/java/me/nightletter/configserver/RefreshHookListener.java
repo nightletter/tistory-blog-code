@@ -17,7 +17,6 @@ import org.springframework.util.StringUtils;
 @Component
 public class RefreshHookListener {
 
-    static final long EVENT_TTL_SECONDS = 180L;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final RabbitTemplate rabbitTemplate;
@@ -38,14 +37,16 @@ public class RefreshHookListener {
     public void hook(RefreshScopeRefreshedEvent event) {
         Assert.notNull(event, "event must not be null");
 
-        Instant now = Instant.now();
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("pattern", "config.refresh");
-        payload.put("event", "refresh");
-        payload.put("scope", event.getName());
-        payload.put("timestamp", now.toString());
-        payload.put("expiresAt", now.plusSeconds(EVENT_TTL_SECONDS).toString());
-        String body = serializePayload(payload);
+        Map<String, Object> data = new HashMap<>();
+        data.put("pattern", "config.refresh");
+        data.put("scope", event.getName());
+        data.put("event", "refresh");
+        
+        Map<String, Object> packet = new HashMap<>();
+        packet.put("pattern", "config.refresh");
+        packet.put("data", data);
+
+        String body = serializePayload(packet);
 
         rabbitTemplate.convertAndSend(exchange, routingKey, body);
     }
